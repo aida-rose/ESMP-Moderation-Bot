@@ -3,7 +3,7 @@ from typing import Optional
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import config
 
@@ -20,6 +20,10 @@ JOINGUARD_KICK_REASON = "Joinguard triggered."
 class Automation(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.unapproved_guild_scan.start()
+
+    def cog_unload(self):
+        self.unapproved_guild_scan.cancel()
 
     def allowed_guild_ids(self) -> set[int]:
         guild_ids = {
@@ -133,13 +137,13 @@ class Automation(commands.Cog):
         except Exception:
             pass
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        await self.enforce_allowed_guilds(source="startup")
+    @tasks.loop(hours=1)
+    async def unapproved_guild_scan(self):
+        await self.enforce_allowed_guilds(source="hourly scan")
 
-    @commands.Cog.listener()
-    async def on_guild_join(self, guild: discord.Guild):
-        await self.leave_unapproved_guild(guild, source="guild join")
+    @unapproved_guild_scan.before_loop
+    async def before_unapproved_guild_scan(self):
+        await self.bot.wait_until_ready()
 
     @app_commands.command(
         name="scan_servers",
