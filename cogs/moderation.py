@@ -44,6 +44,68 @@ def current_sync_guild_ids() -> set[int]:
     return set(config.SYNC_GUILD_IDS) | get_runtime_affiliate_ids()
 
 
+def member_status_text(member: discord.Member) -> str:
+    status_labels = {
+        discord.Status.online: "Online",
+        discord.Status.idle: "Idle",
+        discord.Status.dnd: "Do Not Disturb",
+    }
+
+    status_parts = []
+    status_label = status_labels.get(member.status)
+
+    if status_label:
+        status_parts.append(status_label)
+
+    custom_status = next(
+        (
+            activity
+            for activity in member.activities
+            if isinstance(activity, discord.CustomActivity)
+            and getattr(activity, "name", None)
+        ),
+        None,
+    )
+
+    if custom_status is not None:
+        status_parts.append(str(custom_status.name))
+
+    if not status_parts:
+        return "cant display status or no status to be displayed"
+
+    return "\n".join(status_parts)
+
+
+def member_role_chunks(member: discord.Member) -> list[str]:
+    roles = [
+        role.mention
+        for role in sorted(member.roles, key=lambda role: role.position, reverse=True)
+        if not role.is_default()
+    ]
+
+    if not roles:
+        return ["No roles."]
+
+    chunks: list[str] = []
+    current = ""
+
+    for role in roles:
+        next_value = role if not current else f"{current}, {role}"
+
+        if len(next_value) <= 1024:
+            current = next_value
+            continue
+
+        if current:
+            chunks.append(current)
+        current = role
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
 class GuildActionResult:
     def __init__(self, guild_name: str, guild_id: int, status: str, detail: str):
         self.guild_name = guild_name
@@ -1118,49 +1180,46 @@ class Moderation(commands.Cog):
                 inline=False,
             )
 
-        server_lines = []
-
-        for guild_id in current_sync_guild_ids():
-            guild = self.bot.get_guild(guild_id)
-
-            if guild is None:
-                continue
-
-            member = await member_in(guild, target_user_id)
+        if ctx.guild is None:
+            embed.add_field(
+                name="Server Membership",
+                value="This command must be used in a server to show server-specific info.",
+                inline=False,
+            )
+        else:
+            member = await member_in(ctx.guild, target_user_id)
 
             if member is None:
-                continue
+                embed.add_field(
+                    name="Server Membership",
+                    value=f"Not currently in **{ctx.guild.name}**.",
+                    inline=False,
+                )
+            else:
+                joined_text = (
+                    discord.utils.format_dt(member.joined_at, "F")
+                    if member.joined_at
+                    else "Unknown"
+                )
 
-            joined_text = (
-                discord.utils.format_dt(member.joined_at, "F")
-                if member.joined_at
-                else "Unknown"
-            )
+                embed.add_field(
+                    name="Server Membership",
+                    value=(
+                        f"**{ctx.guild.name}** `({ctx.guild.id})`\n"
+                        f"Joined: {joined_text}\n"
+                        f"Top Role: {member.top_role.mention}"
+                    ),
+                    inline=False,
+                )
+                embed.add_field(
+                    name="Status",
+                    value=member_status_text(member),
+                    inline=False,
+                )
 
-            timeout_text = (
-                discord.utils.format_dt(member.timed_out_until, "R")
-                if member.timed_out_until
-                else "Not timed out"
-            )
-
-            server_lines.append(
-                f"**{guild.name}** `({guild.id})`\n"
-                f"Status: In server\n"
-                f"Joined: {joined_text}\n"
-                f"Top Role: {member.top_role.mention}\n"
-                f"Timeout: {timeout_text}"
-            )
-
-        server_info = "\n\n".join(server_lines)
-
-        if len(server_info) > 3900:
-            server_info = server_info[:3897] + "..."
-
-        embed.add_field(
-            name="Server Membership",
-            value=server_info or "Not currently in any synced servers the bot can see.",
-            inline=False,
-        )
+                for index, role_chunk in enumerate(member_role_chunks(member), start=1):
+                    field_name = "Roles" if index == 1 else f"Roles {index}"
+                    embed.add_field(name=field_name, value=role_chunk, inline=False)
 
         await ctx.reply(
             embed=embed,
