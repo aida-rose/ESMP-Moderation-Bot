@@ -17,6 +17,10 @@ JOINGUARD_MIN_ACCOUNT_AGE = timedelta(days=7)
 JOINGUARD_KICK_REASON = "Joinguard triggered."
 
 
+def format_member(member: discord.Member) -> str:
+    return f"<@{member.id}> {member} (`{member.id}`)"
+
+
 class Automation(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -95,6 +99,7 @@ class Automation(commands.Cog):
         title: str,
         description: str,
         color: discord.Color = discord.Color.red(),
+        thumbnail_url: Optional[str] = None,
     ):
         if config.LOG_JOINS_THREAD_ID == 0:
             return
@@ -117,6 +122,9 @@ class Automation(commands.Cog):
                 color=color,
                 timestamp=discord.utils.utcnow(),
             )
+
+            if thumbnail_url:
+                embed.set_thumbnail(url=thumbnail_url)
 
             if guild is not None:
                 embed.add_field(
@@ -177,10 +185,11 @@ class Automation(commands.Cog):
                     member.guild,
                     "Joinguard Kick Failed",
                     (
-                        f"Could not kick `{member}` (`{member.id}`).\n\n"
+                        f"Could not kick {format_member(member)}.\n\n"
                         f"Reason: missing **Kick Members** permission or role hierarchy issue.\n"
                         f"Account age: `{account_age}`"
                     ),
+                    thumbnail_url=member.display_avatar.url,
                 )
 
             except discord.HTTPException as error:
@@ -188,10 +197,11 @@ class Automation(commands.Cog):
                     member.guild,
                     "Joinguard Kick Failed",
                     (
-                        f"Could not kick `{member}` (`{member.id}`).\n\n"
+                        f"Could not kick {format_member(member)}.\n\n"
                         f"Discord HTTP error: `{error}`\n"
                         f"Account age: `{account_age}`"
                     ),
+                    thumbnail_url=member.display_avatar.url,
                 )
 
             return
@@ -204,6 +214,7 @@ class Automation(commands.Cog):
                 member.guild,
                 "Join Role Failed",
                 "`PRIMARY_JOIN_ROLE_ID` is not configured.",
+                thumbnail_url=member.display_avatar.url,
             )
             return
 
@@ -214,6 +225,7 @@ class Automation(commands.Cog):
                 member.guild,
                 "Join Role Failed",
                 f"Could not find join role with ID `{config.PRIMARY_JOIN_ROLE_ID}`.",
+                thumbnail_url=member.display_avatar.url,
             )
             return
 
@@ -228,9 +240,10 @@ class Automation(commands.Cog):
                 member.guild,
                 "Join Role Failed",
                 (
-                    f"Could not add {role.mention} to `{member}` (`{member.id}`).\n\n"
+                    f"Could not add {role.mention} to {format_member(member)}.\n\n"
                     f"Reason: missing **Manage Roles** permission or role hierarchy issue."
                 ),
+                thumbnail_url=member.display_avatar.url,
             )
 
         except discord.HTTPException as error:
@@ -238,9 +251,10 @@ class Automation(commands.Cog):
                 member.guild,
                 "Join Role Failed",
                 (
-                    f"Could not add {role.mention} to `{member}` (`{member.id}`).\n\n"
+                    f"Could not add {role.mention} to {format_member(member)}.\n\n"
                     f"Discord HTTP error: `{error}`"
                 ),
+                thumbnail_url=member.display_avatar.url,
             )
 
 

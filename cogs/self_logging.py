@@ -35,6 +35,27 @@ def format_guild(guild: Optional[discord.Guild]) -> str:
     return f"{guild.name} (`{guild.id}`)"
 
 
+def format_user(user: Optional[discord.abc.User]) -> str:
+    if user is None:
+        return "Unknown"
+
+    return f"<@{user.id}> {user} (`{user.id}`)"
+
+
+def format_user_id(user_id: int | str | None) -> str:
+    if user_id in (None, ""):
+        return "Unknown"
+
+    return f"<@{user_id}> (`{user_id}`)"
+
+
+def avatar_url(user: Optional[discord.abc.User]) -> str | None:
+    if user is None:
+        return None
+
+    return user.display_avatar.url
+
+
 def format_role(role: Optional[discord.Role]) -> str:
     if role is None:
         return "None"
@@ -144,6 +165,7 @@ class SelfLogging(commands.Cog):
         description: Optional[str] = None,
         fields: Optional[list[tuple[str, str, bool]]] = None,
         color: discord.Color = discord.Color.blurple(),
+        thumbnail_url: Optional[str] = None,
     ):
         thread = await self.get_self_log_thread()
 
@@ -156,6 +178,9 @@ class SelfLogging(commands.Cog):
             color=color,
             timestamp=discord.utils.utcnow(),
         )
+
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
 
         embed.add_field(
             name="Server",
@@ -369,7 +394,7 @@ class SelfLogging(commands.Cog):
             ]
 
         actor = entry.user
-        actor_text = f"{actor} (`{actor.id}`)" if actor else "Unknown"
+        actor_text = format_user(actor) if actor else "Unknown"
 
         fields = [
             ("Actor", actor_text, False),
@@ -421,6 +446,7 @@ class SelfLogging(commands.Cog):
                 ("Reapply Result", reapply_result, False),
             ],
             color=color,
+            thumbnail_url=avatar_url(target_user),
         )
 
     async def on_protected_ban_removed(
@@ -550,7 +576,7 @@ class SelfLogging(commands.Cog):
                 ("Server Name", guild.name, True),
                 ("Server ID", f"`{guild.id}`", True),
                 ("Member Count", str(guild.member_count), True),
-                ("Owner ID", f"`{guild.owner_id}`", True),
+                ("Owner", format_user_id(guild.owner_id), True),
             ],
             color=discord.Color.green(),
         )
@@ -564,7 +590,7 @@ class SelfLogging(commands.Cog):
                 ("Server Name", guild.name, True),
                 ("Server ID", f"`{guild.id}`", True),
                 ("Member Count", str(guild.member_count), True),
-                ("Owner ID", f"`{guild.owner_id}`", True),
+                ("Owner", format_user_id(guild.owner_id), True),
             ],
             color=discord.Color.red(),
         )
@@ -637,6 +663,7 @@ class SelfLogging(commands.Cog):
             title="Bot Roles / Permissions / Hierarchy Changed",
             fields=fields,
             color=discord.Color.orange(),
+            thumbnail_url=avatar_url(after),
         )
 
     @commands.Cog.listener()

@@ -143,14 +143,28 @@ def format_user(user: Optional[discord.abc.User]) -> str:
     if user is None:
         return "Unknown"
 
-    return f"{user} (`{user.id}`)"
+    return f"<@{user.id}> {user} (`{user.id}`)"
 
 
 def format_member(member: Optional[discord.Member]) -> str:
     if member is None:
         return "Unknown"
 
-    return f"{member} (`{member.id}`)"
+    return f"<@{member.id}> {member} (`{member.id}`)"
+
+
+def format_user_id(user_id: int | str | None) -> str:
+    if user_id in (None, ""):
+        return "Unknown"
+
+    return f"<@{user_id}> (`{user_id}`)"
+
+
+def avatar_url(user: Optional[discord.abc.User]) -> str | None:
+    if user is None:
+        return None
+
+    return user.display_avatar.url
 
 
 def format_channel(channel: Optional[discord.abc.GuildChannel | discord.Thread]) -> str:
@@ -165,11 +179,190 @@ def format_channel(channel: Optional[discord.abc.GuildChannel | discord.Thread])
     return f"{channel.name} (`{channel.id}`)"
 
 
+def format_voice_channel_status(status: Optional[str]) -> str:
+    if status in (None, ""):
+        return "None / cleared"
+
+    return truncate(status, 1024)
+
+
+MEDIA_EXTENSIONS = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".avif",
+)
+
+
+def looks_like_image_or_gif_url(url: Optional[str]) -> bool:
+    if not url:
+        return False
+
+    clean_url = url.split("?", 1)[0].lower()
+    return clean_url.endswith(MEDIA_EXTENSIONS)
+
+
+def attachment_media_url(attachment: discord.Attachment) -> str | None:
+    content_type = getattr(attachment, "content_type", None)
+    filename = getattr(attachment, "filename", "")
+
+    if not (
+        content_type and content_type.lower().startswith("image/")
+    ) and not filename.lower().endswith(MEDIA_EXTENSIONS):
+        return None
+
+    return getattr(attachment, "proxy_url", None) or attachment.url
+
+
+def embed_media_urls(message_embed: discord.Embed) -> list[str]:
+    urls: list[str] = []
+
+    for attr in ("image", "thumbnail"):
+        media = getattr(message_embed, attr, None)
+
+        for url_attr in ("proxy_url", "url"):
+            url = getattr(media, url_attr, None)
+
+            if url and url not in urls:
+                urls.append(url)
+
+    video = getattr(message_embed, "video", None)
+
+    for url_attr in ("proxy_url", "url"):
+        url = getattr(video, url_attr, None)
+
+        if looks_like_image_or_gif_url(url) and url not in urls:
+            urls.append(url)
+
+    embed_url = getattr(message_embed, "url", None)
+
+    if looks_like_image_or_gif_url(embed_url) and embed_url not in urls:
+        urls.append(embed_url)
+
+    return urls
+
+
+def message_media_urls(message: discord.Message) -> list[str]:
+    urls: list[str] = []
+
+    for attachment in message.attachments:
+        url = attachment_media_url(attachment)
+
+        if url and url not in urls:
+            urls.append(url)
+
+    for message_embed in message.embeds:
+        for url in embed_media_urls(message_embed):
+            if url not in urls:
+                urls.append(url)
+
+    for url in re.findall(r"https?://\S+", message.content or ""):
+        url = url.rstrip(").,!?\"'")
+
+        if looks_like_image_or_gif_url(url) and url not in urls:
+            urls.append(url)
+
+    return urls
+
+
+def media_links_text(urls: list[str]) -> str:
+    if not urls:
+        return "None"
+
+    lines = [
+        f"[Media {index}]({url})"
+        for index, url in enumerate(urls, start=1)
+    ]
+
+    return truncate("\n".join(lines), 1024)
+
+
+def custom_emoji_image_url(emoji: discord.PartialEmoji) -> str | None:
+    emoji_id = getattr(emoji, "id", None)
+
+    if emoji_id is None:
+        return None
+
+    emoji_url = getattr(emoji, "url", None)
+
+    if emoji_url:
+        return str(emoji_url)
+
+    extension = "gif" if getattr(emoji, "animated", False) else "png"
+    return f"https://cdn.discordapp.com/emojis/{emoji_id}.{extension}?quality=lossless"
+
+
 def format_role(role: Optional[discord.Role]) -> str:
     if role is None:
         return "Unknown"
 
     return f"{role.mention} `{role.name}` (`{role.id}`)"
+
+
+def format_role_color(color: Optional[discord.Color]) -> str:
+    if color is None:
+        return "Unknown"
+
+    return f"`{color}` (`{color.value}`)"
+
+
+def role_log_color(role: discord.Role, fallback: discord.Color) -> discord.Color:
+    role_color = getattr(role, "color", None)
+
+    if isinstance(role_color, discord.Color) and role_color.value != 0:
+        return role_color
+
+    return fallback
+
+
+def role_icon_identity(role: discord.Role) -> str | None:
+    icon = getattr(role, "display_icon", None)
+
+    if icon is None:
+        icon = getattr(role, "icon", None)
+
+    if icon is None:
+        icon = getattr(role, "unicode_emoji", None)
+
+    if icon is None:
+        return None
+
+    return getattr(icon, "url", None) or str(icon)
+
+
+def role_icon_url(role: discord.Role) -> str | None:
+    icon = getattr(role, "display_icon", None)
+
+    if icon is None:
+        icon = getattr(role, "icon", None)
+
+    if icon is None:
+        return None
+
+    return getattr(icon, "url", None)
+
+
+def format_role_icon(role: discord.Role) -> str:
+    icon = getattr(role, "display_icon", None)
+
+    if icon is None:
+        icon = getattr(role, "icon", None)
+
+    if icon is None:
+        icon = getattr(role, "unicode_emoji", None)
+
+    if icon is None:
+        return "None"
+
+    url = getattr(icon, "url", None)
+
+    if url:
+        return f"[Role icon]({url})"
+
+    return str(icon)
 
 
 def format_guild(guild: Optional[discord.Guild]) -> str:
@@ -280,6 +473,7 @@ class Logging(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._recent_voice_channel_status_logs: dict[int, tuple[Optional[str], datetime]] = {}
 
     # ------------------------------------------------------------
     # Core log sending
@@ -324,6 +518,8 @@ class Logging(commands.Cog):
         fields: Optional[list[tuple[str, str, bool]]] = None,
         color: discord.Color = discord.Color.blurple(),
         file: Optional[discord.File] = None,
+        thumbnail_url: Optional[str] = None,
+        image_urls: Optional[list[str]] = None,
     ):
         if guild is not None and not self.should_log_guild(guild):
             return
@@ -334,6 +530,21 @@ class Logging(commands.Cog):
             color=color,
             timestamp=utc_now(),
         )
+
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
+
+        preview_urls = []
+
+        if image_urls:
+            for url in image_urls:
+                if url and url not in preview_urls:
+                    preview_urls.append(url)
+
+        preview_urls = preview_urls[:10]
+
+        if preview_urls:
+            embed.set_image(url=preview_urls[0])
 
         embed.add_field(
             name="Server",
@@ -357,8 +568,19 @@ class Logging(commands.Cog):
             if thread is None:
                 return
 
+            embeds = [embed]
+
+            for index, image_url in enumerate(preview_urls[1:], start=2):
+                media_embed = discord.Embed(
+                    color=color,
+                    timestamp=utc_now(),
+                )
+                media_embed.set_image(url=image_url)
+                media_embed.set_footer(text=f"Media {index} • Log category: {category}")
+                embeds.append(media_embed)
+
             await thread.send(
-                embed=embed,
+                embeds=embeds,
                 file=file,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -373,6 +595,8 @@ class Logging(commands.Cog):
         title: str,
         description: str,
         color: discord.Color = discord.Color.blurple(),
+        thumbnail_url: Optional[str] = None,
+        image_urls: Optional[list[str]] = None,
     ):
         await self.send_log(
             category=category,
@@ -380,6 +604,8 @@ class Logging(commands.Cog):
             title=title,
             description=description,
             color=color,
+            thumbnail_url=thumbnail_url,
+            image_urls=image_urls,
         )
 
     async def find_audit_entry(
@@ -447,6 +673,8 @@ class Logging(commands.Cog):
         description: Optional[str] = None,
         fields: Optional[list[tuple[str, str, bool]]] = None,
         color: discord.Color = discord.Color.orange(),
+        thumbnail_url: Optional[str] = None,
+        image_urls: Optional[list[str]] = None,
     ):
         await self.send_log(
             category="moderation",
@@ -455,6 +683,8 @@ class Logging(commands.Cog):
             description=description,
             fields=fields,
             color=color,
+            thumbnail_url=thumbnail_url,
+            image_urls=image_urls,
         )
 
     async def nation_selector_log(
@@ -513,7 +743,7 @@ class Logging(commands.Cog):
             fields.append(("Warn ID", f"`{warn_id}`", True))
 
         if target_user_id is not None:
-            target_value = format_user(target_user) if target_user else f"`{target_user_id}`"
+            target_value = format_user(target_user) if target_user else format_user_id(target_user_id)
             fields.append(("Target", target_value, False))
 
         if moderator is not None:
@@ -536,6 +766,7 @@ class Logging(commands.Cog):
             title=action,
             fields=fields,
             color=discord.Color.gold(),
+            thumbnail_url=avatar_url(target_user),
         )
 
     async def log_warn(self, **kwargs):
@@ -579,18 +810,26 @@ class Logging(commands.Cog):
         if regex_match:
             reason_parts.append(f"Matched regex: `{truncate(regex_match.group(0), 100)}`")
 
+        media_urls = message_media_urls(message)
+        fields = [
+            ("Author", format_user(message.author), False),
+            ("Channel", format_channel(message.channel), False),
+            ("Reason", "\n".join(reason_parts), False),
+            ("Message", truncate(message.content, 1024), False),
+            ("Jump Link", message.jump_url, False),
+        ]
+
+        if media_urls:
+            fields.append(("Image / GIF Preview Links", media_links_text(media_urls), False))
+
         await self.send_log(
             category="flagged_message",
             guild=message.guild,
             title="Flagged Possible Inappropriate Message",
-            fields=[
-                ("Author", format_user(message.author), False),
-                ("Channel", format_channel(message.channel), False),
-                ("Reason", "\n".join(reason_parts), False),
-                ("Message", truncate(message.content, 1024), False),
-                ("Jump Link", message.jump_url, False),
-            ],
+            fields=fields,
             color=discord.Color.red(),
+            thumbnail_url=avatar_url(message.author),
+            image_urls=media_urls,
         )
 
     @commands.Cog.listener()
@@ -602,19 +841,27 @@ class Logging(commands.Cog):
             return
 
         attachments = "\n".join(attachment.url for attachment in message.attachments) or "None"
+        media_urls = message_media_urls(message)
+
+        fields = [
+            ("Author", format_user(message.author), False),
+            ("Channel", format_channel(message.channel), False),
+            ("Message ID", f"`{message.id}`", True),
+            ("Content", truncate(message.content or "[No cached content]", 1024), False),
+            ("Attachments", truncate(attachments, 1024), False),
+        ]
+
+        if media_urls:
+            fields.append(("Image / GIF Preview Links", media_links_text(media_urls), False))
 
         await self.send_log(
             category="message",
             guild=message.guild,
             title="Message Deleted",
-            fields=[
-                ("Author", format_user(message.author), False),
-                ("Channel", format_channel(message.channel), False),
-                ("Message ID", f"`{message.id}`", True),
-                ("Content", truncate(message.content or "[No cached content]", 1024), False),
-                ("Attachments", truncate(attachments, 1024), False),
-            ],
+            fields=fields,
             color=discord.Color.red(),
+            thumbnail_url=avatar_url(message.author),
+            image_urls=media_urls,
         )
 
     @commands.Cog.listener()
@@ -638,6 +885,7 @@ class Logging(commands.Cog):
         writer.writerow([
             "Message ID",
             "Author",
+            "Author Mention",
             "Author ID",
             "Created At UTC",
             "Channel",
@@ -647,10 +895,12 @@ class Logging(commands.Cog):
         ])
 
         for message in sorted(messages, key=lambda item: item.created_at):
+            author_id = getattr(message.author, "id", "")
             writer.writerow([
                 message.id,
                 str(message.author),
-                getattr(message.author, "id", ""),
+                f"<@{author_id}>" if author_id else "",
+                author_id,
                 message.created_at.isoformat(),
                 getattr(channel, "name", "Unknown"),
                 getattr(channel, "id", "Unknown"),
@@ -664,16 +914,35 @@ class Logging(commands.Cog):
             filename=f"bulk-delete-{guild.id}-{int(utc_now().timestamp())}.txt",
         )
 
+        bulk_media_urls: list[str] = []
+
+        for message in messages:
+            for url in message_media_urls(message):
+                if url not in bulk_media_urls:
+                    bulk_media_urls.append(url)
+
+        fields = [
+            ("Channel", format_channel(channel), False),
+            ("Messages Deleted", str(len(messages)), True),
+        ]
+
+        if bulk_media_urls:
+            fields.append(
+                (
+                    "Image / GIF Preview Links",
+                    media_links_text(bulk_media_urls[:10]),
+                    False,
+                )
+            )
+
         await self.send_log(
             category="message",
             guild=guild,
             title="Bulk Message Deletion",
-            fields=[
-                ("Channel", format_channel(channel), False),
-                ("Messages Deleted", str(len(messages)), True),
-            ],
+            fields=fields,
             color=discord.Color.red(),
             file=file,
+            image_urls=bulk_media_urls,
         )
 
     @commands.Cog.listener()
@@ -690,18 +959,26 @@ class Logging(commands.Cog):
         if not self.should_log_guild(before.guild):
             return
 
+        media_urls = message_media_urls(after)
+        fields = [
+            ("Author", format_user(before.author), False),
+            ("Channel", format_channel(before.channel), False),
+            ("Before", truncate(before.content or "[No cached content]", 1024), False),
+            ("After", truncate(after.content or "[No cached content]", 1024), False),
+            ("Jump Link", after.jump_url, False),
+        ]
+
+        if media_urls:
+            fields.append(("Image / GIF Preview Links", media_links_text(media_urls), False))
+
         await self.send_log(
             category="message",
             guild=before.guild,
             title="Message Edited",
-            fields=[
-                ("Author", format_user(before.author), False),
-                ("Channel", format_channel(before.channel), False),
-                ("Before", truncate(before.content or "[No cached content]", 1024), False),
-                ("After", truncate(after.content or "[No cached content]", 1024), False),
-                ("Jump Link", after.jump_url, False),
-            ],
+            fields=fields,
             color=discord.Color.orange(),
+            thumbnail_url=avatar_url(before.author),
+            image_urls=media_urls,
         )
 
     # ------------------------------------------------------------
@@ -725,6 +1002,7 @@ class Logging(commands.Cog):
             title="User Banned",
             fields=fields,
             color=discord.Color.dark_red(),
+            thumbnail_url=avatar_url(user),
         )
 
     @commands.Cog.listener()
@@ -744,6 +1022,7 @@ class Logging(commands.Cog):
             title="User Unbanned",
             fields=fields,
             color=discord.Color.green(),
+            thumbnail_url=avatar_url(user),
         )
 
     @commands.Cog.listener()
@@ -772,6 +1051,7 @@ class Logging(commands.Cog):
                 title="User Kicked",
                 fields=fields,
                 color=discord.Color.dark_orange(),
+                thumbnail_url=avatar_url(member),
             )
             return
 
@@ -785,6 +1065,7 @@ class Logging(commands.Cog):
                 ("Account Created", format_dt(member.created_at), False),
             ],
             color=discord.Color.dark_gray(),
+            thumbnail_url=avatar_url(member),
         )
 
     # ------------------------------------------------------------
@@ -806,6 +1087,7 @@ class Logging(commands.Cog):
                 ("Bot Account", str(member.bot), True),
             ],
             color=discord.Color.green(),
+            thumbnail_url=avatar_url(member),
         )
 
     # ------------------------------------------------------------
@@ -845,6 +1127,7 @@ class Logging(commands.Cog):
                 title=title,
                 fields=fields,
                 color=color,
+                thumbnail_url=avatar_url(after),
             )
 
         if before.nick != after.nick:
@@ -858,6 +1141,7 @@ class Logging(commands.Cog):
                     ("After", after.nick or "None", True),
                 ],
                 color=discord.Color.blurple(),
+                thumbnail_url=avatar_url(after),
             )
 
         added_roles, removed_roles = role_diff(before.roles, after.roles)
@@ -887,6 +1171,7 @@ class Logging(commands.Cog):
                 title="User Role Update",
                 fields=fields,
                 color=discord.Color.blue(),
+                thumbnail_url=avatar_url(after),
             )
 
             mute_added = [
@@ -909,6 +1194,7 @@ class Logging(commands.Cog):
                         ("Role(s)", role_list_text(mute_added), False),
                     ],
                     color=discord.Color.dark_orange(),
+                    thumbnail_url=avatar_url(after),
                 )
 
             if mute_removed:
@@ -921,6 +1207,7 @@ class Logging(commands.Cog):
                         ("Role(s)", role_list_text(mute_removed), False),
                     ],
                     color=discord.Color.green(),
+                    thumbnail_url=avatar_url(after),
                 )
 
     # ------------------------------------------------------------
@@ -954,6 +1241,7 @@ class Logging(commands.Cog):
                         ("Changes", "\n\n".join(changed), False),
                     ],
                     color=discord.Color.blurple(),
+                    thumbnail_url=avatar_url(after),
                 )
 
     # ------------------------------------------------------------
@@ -967,7 +1255,11 @@ class Logging(commands.Cog):
 
         fields = [
             ("Role", format_role(role), False),
+            ("Color", format_role_color(role.color), True),
         ]
+
+        if role_icon_identity(role) is not None:
+            fields.append(("Role Icon", format_role_icon(role), True))
 
         fields.extend(await self.audit_fields(role.guild, discord.AuditLogAction.role_create, role.id))
 
@@ -976,7 +1268,8 @@ class Logging(commands.Cog):
             guild=role.guild,
             title="Role Created",
             fields=fields,
-            color=discord.Color.green(),
+            color=role_log_color(role, discord.Color.green()),
+            thumbnail_url=role_icon_url(role),
         )
 
     @commands.Cog.listener()
@@ -1008,12 +1301,29 @@ class Logging(commands.Cog):
             after,
             [
                 "name",
-                "color",
                 "hoist",
                 "mentionable",
                 "permissions",
             ],
         )
+
+        color_changed = before.color != after.color
+
+        if color_changed:
+            changes.append(
+                "**color**\n"
+                f"Before: {format_role_color(before.color)}\n"
+                f"After: {format_role_color(after.color)}"
+            )
+
+        icon_changed = role_icon_identity(before) != role_icon_identity(after)
+
+        if icon_changed:
+            changes.append(
+                "**role icon**\n"
+                f"Before: {format_role_icon(before)}\n"
+                f"After: {format_role_icon(after)}"
+            )
 
         if not changes:
             return
@@ -1030,7 +1340,8 @@ class Logging(commands.Cog):
             guild=after.guild,
             title="Role Updated",
             fields=fields,
-            color=discord.Color.orange(),
+            color=after.color if color_changed else discord.Color.orange(),
+            thumbnail_url=role_icon_url(after) if icon_changed else None,
         )
 
     # ------------------------------------------------------------
@@ -1142,7 +1453,7 @@ class Logging(commands.Cog):
         fields = [
             ("Thread", format_channel(thread), False),
             ("Parent", format_channel(thread.parent), False),
-            ("Owner ID", f"`{thread.owner_id}`", True),
+            ("Owner", format_user_id(thread.owner_id), True),
         ]
 
         fields.extend(await self.audit_fields(thread.guild, discord.AuditLogAction.thread_create, thread.id))
@@ -1153,6 +1464,7 @@ class Logging(commands.Cog):
             title="Thread Created",
             fields=fields,
             color=discord.Color.green(),
+            thumbnail_url=await self.avatar_url_for_user_id(thread.owner_id),
         )
 
     @commands.Cog.listener()
@@ -1452,6 +1764,7 @@ class Logging(commands.Cog):
                 ("Expires At", format_dt(invite.expires_at), False),
             ],
             color=discord.Color.green(),
+            thumbnail_url=avatar_url(invite.inviter),
         )
 
     @commands.Cog.listener()
@@ -1487,6 +1800,20 @@ class Logging(commands.Cog):
 
         return self.bot.get_guild(guild_id)
 
+    async def avatar_url_for_user_id(self, user_id: int | None) -> str | None:
+        if user_id is None:
+            return None
+
+        user = self.bot.get_user(user_id)
+
+        if user is None:
+            try:
+                user = await self.bot.fetch_user(user_id)
+            except discord.HTTPException:
+                return None
+
+        return avatar_url(user)
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         guild = await self.guild_from_payload(payload)
@@ -1497,18 +1824,26 @@ class Logging(commands.Cog):
         if self.bot.user and payload.user_id == self.bot.user.id:
             return
 
+        emoji_image_url = custom_emoji_image_url(payload.emoji)
+        fields = [
+            ("User", format_user_id(payload.user_id), True),
+            ("Emoji", str(payload.emoji), True),
+            ("Channel ID", f"`{payload.channel_id}`", True),
+            ("Message ID", f"`{payload.message_id}`", True),
+            ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
+        ]
+
+        if emoji_image_url:
+            fields.append(("Emoji Image", f"[Open emoji image]({emoji_image_url})", False))
+
         await self.send_log(
             category="reaction",
             guild=guild,
             title="Reaction Added",
-            fields=[
-                ("User ID", f"`{payload.user_id}`", True),
-                ("Emoji", str(payload.emoji), True),
-                ("Channel ID", f"`{payload.channel_id}`", True),
-                ("Message ID", f"`{payload.message_id}`", True),
-                ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
-            ],
+            fields=fields,
             color=discord.Color.green(),
+            thumbnail_url=await self.avatar_url_for_user_id(payload.user_id),
+            image_urls=[emoji_image_url] if emoji_image_url else None,
         )
 
     @commands.Cog.listener()
@@ -1518,18 +1853,26 @@ class Logging(commands.Cog):
         if not self.should_log_guild(guild):
             return
 
+        emoji_image_url = custom_emoji_image_url(payload.emoji)
+        fields = [
+            ("User", format_user_id(payload.user_id), True),
+            ("Emoji", str(payload.emoji), True),
+            ("Channel ID", f"`{payload.channel_id}`", True),
+            ("Message ID", f"`{payload.message_id}`", True),
+            ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
+        ]
+
+        if emoji_image_url:
+            fields.append(("Emoji Image", f"[Open emoji image]({emoji_image_url})", False))
+
         await self.send_log(
             category="reaction",
             guild=guild,
             title="Reaction Removed",
-            fields=[
-                ("User ID", f"`{payload.user_id}`", True),
-                ("Emoji", str(payload.emoji), True),
-                ("Channel ID", f"`{payload.channel_id}`", True),
-                ("Message ID", f"`{payload.message_id}`", True),
-                ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
-            ],
+            fields=fields,
             color=discord.Color.red(),
+            thumbnail_url=await self.avatar_url_for_user_id(payload.user_id),
+            image_urls=[emoji_image_url] if emoji_image_url else None,
         )
 
     @commands.Cog.listener()
@@ -1558,22 +1901,114 @@ class Logging(commands.Cog):
         if not self.should_log_guild(guild):
             return
 
+        emoji_image_url = custom_emoji_image_url(payload.emoji)
+        fields = [
+            ("Emoji", str(payload.emoji), True),
+            ("Channel ID", f"`{payload.channel_id}`", True),
+            ("Message ID", f"`{payload.message_id}`", True),
+            ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
+        ]
+
+        if emoji_image_url:
+            fields.append(("Emoji Image", f"[Open emoji image]({emoji_image_url})", False))
+
         await self.send_log(
             category="reaction",
             guild=guild,
             title="Reaction Emoji Cleared",
-            fields=[
-                ("Emoji", str(payload.emoji), True),
-                ("Channel ID", f"`{payload.channel_id}`", True),
-                ("Message ID", f"`{payload.message_id}`", True),
-                ("Message Link", message_link(payload.guild_id, payload.channel_id, payload.message_id), False),
-            ],
+            fields=fields,
             color=discord.Color.red(),
+            image_urls=[emoji_image_url] if emoji_image_url else None,
         )
 
     # ------------------------------------------------------------
     # Voice channel / stage actions
     # ------------------------------------------------------------
+
+    async def log_voice_channel_status_change(
+        self,
+        channel: discord.VoiceChannel,
+        before: Optional[str],
+        after: Optional[str],
+    ) -> None:
+        if not self.should_log_guild(channel.guild):
+            return
+
+        recent = self._recent_voice_channel_status_logs.get(channel.id)
+        if recent is not None:
+            recent_after, logged_at = recent
+
+            if recent_after == after and (utc_now() - logged_at).total_seconds() < 5:
+                return
+
+        self._recent_voice_channel_status_logs[channel.id] = (after, utc_now())
+
+        fields = [
+            ("Channel", format_channel(channel), False),
+            ("Before", format_voice_channel_status(before), False),
+            ("After", format_voice_channel_status(after), False),
+            ("Status Set To", format_voice_channel_status(after), False),
+        ]
+
+        fields.extend(
+            await self.audit_fields(
+                channel.guild,
+                discord.AuditLogAction.channel_update,
+                channel.id,
+            )
+        )
+
+        await self.send_log(
+            category="vc",
+            guild=channel.guild,
+            title="Voice Channel Status Changed",
+            fields=fields,
+            color=discord.Color.blurple() if after else discord.Color.dark_gray(),
+        )
+
+    @commands.Cog.listener()
+    async def on_voice_channel_status_update(
+        self,
+        channel: discord.VoiceChannel,
+        before: Optional[str],
+        after: Optional[str],
+    ):
+        await self.log_voice_channel_status_change(channel, before, after)
+
+    @commands.Cog.listener()
+    async def on_socket_response(self, payload: dict):
+        if payload.get("t") != "VOICE_CHANNEL_STATUS_UPDATE":
+            return
+
+        data = payload.get("d") or {}
+        channel_id = data.get("id")
+        after = data.get("status")
+
+        if channel_id is None:
+            return
+
+        try:
+            parsed_channel_id = int(channel_id)
+        except (TypeError, ValueError):
+            return
+
+        channel = self.bot.get_channel(parsed_channel_id)
+
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(parsed_channel_id)
+            except discord.HTTPException:
+                return
+
+        if not isinstance(channel, discord.VoiceChannel):
+            return
+
+        before = getattr(channel, "status", None)
+
+        if before == after:
+            before = "Unknown (raw gateway fallback)"
+
+        await self.log_voice_channel_status_change(channel, before, after)
 
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -1595,6 +2030,7 @@ class Logging(commands.Cog):
                     ("Channel", format_channel(after.channel), False),
                 ],
                 color=discord.Color.green(),
+                thumbnail_url=avatar_url(member),
             )
             return
 
@@ -1608,6 +2044,7 @@ class Logging(commands.Cog):
                     ("Channel", format_channel(before.channel), False),
                 ],
                 color=discord.Color.red(),
+                thumbnail_url=avatar_url(member),
             )
             return
 
@@ -1622,6 +2059,7 @@ class Logging(commands.Cog):
                     ("After", format_channel(after.channel), False),
                 ],
                 color=discord.Color.orange(),
+                thumbnail_url=avatar_url(member),
             )
             return
 
@@ -1656,6 +2094,7 @@ class Logging(commands.Cog):
                     ("Changes", "\n".join(changes), False),
                 ],
                 color=discord.Color.blurple(),
+                thumbnail_url=avatar_url(member),
             )
 
     @commands.Cog.listener()

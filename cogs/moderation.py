@@ -1088,7 +1088,7 @@ class Moderation(commands.Cog):
         if target_user is not None:
             embed.add_field(
                 name="User",
-                value=f"{target_user} (`{target_user.id}`)",
+                value=f"<@{target_user.id}> {target_user} (`{target_user.id}`)",
                 inline=False,
             )
 
@@ -1108,7 +1108,7 @@ class Moderation(commands.Cog):
         else:
             embed.add_field(
                 name="User",
-                value=f"`{target_user_id}`",
+                value=f"<@{target_user_id}> (`{target_user_id}`)",
                 inline=False,
             )
 
@@ -1124,19 +1124,11 @@ class Moderation(commands.Cog):
             guild = self.bot.get_guild(guild_id)
 
             if guild is None:
-                server_lines.append(
-                    f"**Unknown Server** `({guild_id})`\n"
-                    "Status: Bot cannot see this server."
-                )
                 continue
 
             member = await member_in(guild, target_user_id)
 
             if member is None:
-                server_lines.append(
-                    f"**{guild.name}** `({guild.id})`\n"
-                    "Status: Not currently in this server."
-                )
                 continue
 
             joined_text = (
@@ -1166,7 +1158,7 @@ class Moderation(commands.Cog):
 
         embed.add_field(
             name="Server Membership",
-            value=server_info or "No synced servers configured.",
+            value=server_info or "Not currently in any synced servers the bot can see.",
             inline=False,
         )
 

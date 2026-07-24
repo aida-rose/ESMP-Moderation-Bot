@@ -146,10 +146,12 @@ async def member_in(guild: discord.Guild, user_id: int) -> Optional[discord.Memb
 
 
 def target_label(user: Optional[discord.User], user_id: int) -> str:
-    if user is None:
-        return f"`{user_id}`"
+    mention = f"<@{user_id}>"
 
-    return f"{user} (`{user_id}`)"
+    if user is None:
+        return f"{mention} (`{user_id}`)"
+
+    return f"{mention} {user} (`{user_id}`)"
 
 
 def duration_arg(duration_text: str, *, max_duration: Optional[timedelta] = timedelta(days=28)) -> timedelta:
@@ -327,7 +329,7 @@ async def case_log(
         embed.set_thumbnail(url=avatar_url)
 
     embed.add_field(name="Target", value=target_label(target_user, target_user_id), inline=False)
-    embed.add_field(name="Moderator", value=f"{moderator} (`{moderator.id}`)", inline=False)
+    embed.add_field(name="Moderator", value=f"<@{moderator.id}> {moderator} (`{moderator.id}`)", inline=False)
 
     if duration is not None:
         embed.add_field(name="Duration", value=str(duration), inline=True)
@@ -370,7 +372,7 @@ async def warn_log(
     
 
     embed.add_field(name="Target", value=target_label(target_user, target_user_id), inline=False)
-    embed.add_field(name="Moderator", value=f"{moderator} (`{moderator.id}`)", inline=False)
+    embed.add_field(name="Moderator", value=f"<@{moderator.id}> {moderator} (`{moderator.id}`)", inline=False)
     embed.add_field(name="Warning Reason", value=trim(reason, 1024), inline=False)
 
     if removed_reason is not None:
@@ -407,7 +409,11 @@ async def backfill_log(
 ) -> None:
     embed = discord.Embed(title=f"{config.CASE_TAG} Primary Ban Backfill", color=discord.Color.red())
 
-    embed.add_field(name="Moderator", value=f"{moderator} (`{moderator.id}`)", inline=False)
+    avatar_url = user_avatar_url(moderator)
+    if avatar_url:
+        embed.set_thumbnail(url=avatar_url)
+
+    embed.add_field(name="Moderator", value=f"<@{moderator.id}> {moderator} (`{moderator.id}`)", inline=False)
     embed.add_field(name="Primary Server", value=f"{home_guild.name} `({home_guild.id})`", inline=False)
     embed.add_field(name="Primary Ban Count", value=str(home_ban_count), inline=True)
     embed.add_field(
